@@ -1,0 +1,60 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: money_tracker_db
+    environment:
+      POSTGRES_DB: money_tracker
+      POSTGRES_USER: money_tracker
+      POSTGRES_PASSWORD: money_tracker
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U money_tracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  migrations:
+    image: alpine:3.19
+    container_name: money_tracker_migrations
+    volumes:
+      - ./internal/infrastructure/repository/postgres/migrations:/migrations
+    command: >
+      sh -c "
+        apk add --no-cache curl &&
+        curl -fsSL https://raw.githubusercontent.com/pressly/goose/master/install.sh | sh &&
+        goose -dir /migrations postgres 'postgres://money_tracker:money_tracker@postgres:5432/money_tracker?sslmode=disable' up
+      "
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app:
+    build:
+      context: .
+      dockerfile: package/money_tracker/Dockerfile
+    container_name: money_tracker_app
+    ports:
+      - "8080:8080"
+    configs:
+      - source: app_config
+        target: /root/config.yaml
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+configs:
+  app_config:
+    content: |
+      database:
+        url: "postgres://money_tracker:money_tracker@postgres:5432/money_tracker?sslmode=disable"
+      jwt:
+        secret: "secret-key"
+
+volumes:
+  postgres_data:

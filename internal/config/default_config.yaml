@@ -1,0 +1,11 @@
+server:
+  port: "8080"
+
+jwt:
+  expiration: 24h
+
+worker:
+  poll_interval: 5s
+
+log:
+  level: debug
